@@ -56,18 +56,18 @@ def connect_to_wifi(ssid, password, encryption_type):
     interface_add_command = f'netsh wlan add profile filename="{profile_path}"'
     interface_add_command_response = subprocess.run(interface_add_command, shell=True, capture_output=True, text=True)
     if interface_add_command_response.returncode ==0:
-        # print(f"interface command reponse :{interface_add_command_response}")
+
         check_interface_command = f'netsh wlan show interface'
         check_interface_command_response = subprocess.run(check_interface_command,shell=True, capture_output=True, text=True)
         interface_name = extract_interface_name(check_interface_command_response.stdout)
-        # print(interface_name)
+
         add_profile_command = f'netsh wlan add profile filename="{profile_path}" interface="{interface_name}"'
         add_profile_command_response = subprocess.run(add_profile_command, shell=True, capture_output=True, text=True)
-        # print(add_profile_command_response.stdout)
+
         if "is added on interface" in add_profile_command_response.stdout:
-            wifi_connect_command = f'netsh wlan connect name={ssid}'
+            wifi_connect_command = f'netsh wlan connect name="{ssid}"'
             result = subprocess.run(wifi_connect_command, shell=True, capture_output=True, text=True)
-            # print(result)
+
             if result.returncode == 0:
                 print(f"Successfully connected to {ssid}")
                 cap.release()
@@ -86,22 +86,28 @@ def extract_interface_name(interface_output):
     return None
 
 
-
 def parse_wifi_qr(data):
     wifi_data = {}
     if data.startswith('WIFI:'):
         elements = data.split(';')
         for element in elements:
+            # print(element)
             if element.startswith('T:'):
+                print(f"encryption: {element[2:]}")
                 wifi_data['encryption'] = element[2:]
-            elif element.startswith('WIFI:S:'):
+            elif element.startswith('WIFI:T:'):
+                print(element.split(':')[2])
+                wifi_data['encryption'] = element.split(':')[2]
+            if element.startswith('WIFI:S:'):
                 wifi_data['ssid'] = element.split(':')[2]
-            elif element.startswith('P:'):
+            elif element.startswith('S:'):
+                wifi_data['ssid'] = element[2:]
+            if element.startswith('P:'):
                 if element[2:] == '':
                     wifi_data['password'] = None  
                 else:
                     wifi_data['password'] = element[2:]  
-            elif element.startswith('H:'):
+            if element.startswith('H:'):
                 wifi_data['hidden'] = element[2:]
     
     return wifi_data
@@ -114,11 +120,11 @@ while True:
 
     for qr_code in qr_codes:
         qr_data = qr_code.data.decode('utf-8')
-        # print(f"QR Code data: {qr_data}")
+        print(qr_code)
         wifi_details = parse_wifi_qr(qr_data)
-        # print(f"wifi details: {wifi_details}")
+
         if wifi_details.get('ssid'):
-            # print(f"Connecting to SSID: {wifi_details['ssid']}")
+            print(f"Connecting to SSID: {wifi_details['ssid']}")
             connect_to_wifi(wifi_details['ssid'], wifi_details['password'], wifi_details['encryption'])
             break
         else:
