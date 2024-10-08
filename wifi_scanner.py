@@ -44,8 +44,9 @@ def create_wifi_profile(ssid, password, encryption_type):
         </MacRandomization>
     </WLANProfile>"""
     
-    current_directory = os.getcwd()
-    profile_path = os.path.join(current_directory, f"{ssid}.xml")
+    profile_path = os.path.join(os.getenv('TEMP'), f"{ssid}.xml")
+    # current_directory = os.getcwd()
+    # profile_path = os.path.join(current_directory, f"{ssid}.xml")
     with open(profile_path, 'w') as file:
         file.write(profile_content)
     
