@@ -92,12 +92,9 @@ def parse_wifi_qr(data):
     if data.startswith('WIFI:'):
         elements = data.split(';')
         for element in elements:
-            # print(element)
             if element.startswith('T:'):
-                print(f"encryption: {element[2:]}")
                 wifi_data['encryption'] = element[2:]
             elif element.startswith('WIFI:T:'):
-                print(element.split(':')[2])
                 wifi_data['encryption'] = element.split(':')[2]
             if element.startswith('WIFI:S:'):
                 wifi_data['ssid'] = element.split(':')[2]
@@ -107,7 +104,8 @@ def parse_wifi_qr(data):
                 if element[2:] == '':
                     wifi_data['password'] = None  
                 else:
-                    wifi_data['password'] = element[2:]  
+                    password = element[2:].replace("&","&amp;")
+                    wifi_data['password'] = password
             if element.startswith('H:'):
                 wifi_data['hidden'] = element[2:]
     
@@ -121,7 +119,6 @@ while True:
 
     for qr_code in qr_codes:
         qr_data = qr_code.data.decode('utf-8')
-        print(qr_code)
         wifi_details = parse_wifi_qr(qr_data)
 
         if wifi_details.get('ssid'):
