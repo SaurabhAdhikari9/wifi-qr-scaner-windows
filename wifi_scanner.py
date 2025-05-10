@@ -1,91 +1,105 @@
 import cv2
 import subprocess
-from pyzbar.pyzbar import decode
 import sys
 import os
+import platform
+import tempfile
+from pyzbar.pyzbar import decode
 
 def create_wifi_profile(ssid, password, encryption_type):
-    authentication = 'open'
-    aes = 'None'
-    
-    if encryption_type == 'WPA':
-        authentication = 'WPA2PSK'
-        aes = 'AES'
-    elif encryption_type == 'WPA2':
-        authentication = 'WPA2PSK'
-        aes = 'AES'
-    
-    profile_content = f"""<?xml version="1.0"?>
-    <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
-        <name>{ssid}</name>
-        <SSIDConfig>
-            <SSID>
-                <name>{ssid}</name>
-            </SSID>
-        </SSIDConfig>
-        <connectionType>ESS</connectionType>
-        <connectionMode>auto</connectionMode>
-        <MSM>
-            <security>
-                <authEncryption>
-                    <authentication>{authentication}</authentication>
-                    <encryption>{aes}</encryption>
-                    <useOneX>false</useOneX>
-                </authEncryption>
-                <sharedKey>
-                    <keyType>passPhrase</keyType>
-                    <protected>false</protected>
-                    <keyMaterial>{password}</keyMaterial>
-                </sharedKey>
-            </security>
-        </MSM>
-        <MacRandomization xmlns="http://www.microsoft.com/networking/WLAN/profile/v3">
-            <enableRandomization>false</enableRandomization>
-        </MacRandomization>
-    </WLANProfile>"""
-    
-    profile_path = os.path.join(os.getenv('TEMP'), f"{ssid}.xml")
-    # current_directory = os.getcwd()
-    # profile_path = os.path.join(current_directory, f"{ssid}.xml")
-    with open(profile_path, 'w') as file:
-        file.write(profile_content)
-    
-    return profile_path
+    if platform.system() == "Windows":
+        authentication = 'open'
+        aes = 'None'
+        
+        if encryption_type == 'WPA':
+            authentication = 'WPA2PSK'
+            aes = 'AES'
+        elif encryption_type == 'WPA2':
+            authentication = 'WPA2PSK'
+            aes = 'AES'
+        
+        profile_content = f"""<?xml version="1.0"?>
+        <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+            <name>{ssid}</name>
+            <SSIDConfig>
+                <SSID>
+                    <name>{ssid}</name>
+                </SSID>
+            </SSIDConfig>
+            <connectionType>ESS</connectionType>
+            <connectionMode>auto</connectionMode>
+            <MSM>
+                <security>
+                    <authEncryption>
+                        <authentication>{authentication}</authentication>
+                        <encryption>{aes}</encryption>
+                        <useOneX>false</useOneX>
+                    </authEncryption>
+                    <sharedKey>
+                        <keyType>passPhrase</keyType>
+                        <protected>false</protected>
+                        <keyMaterial>{password}</keyMaterial>
+                    </sharedKey>
+                </security>
+            </MSM>
+            <MacRandomization xmlns="http://www.microsoft.com/networking/WLAN/profile/v3">
+                <enableRandomization>false</enableRandomization>
+            </MacRandomization>
+        </WLANProfile>"""
+        
+        profile_path = os.path.join(tempfile.gettempdir(), f"{ssid}.xml")
+        with open(profile_path, 'w') as file:
+            file.write(profile_content)
+        
+        return profile_path
+    else:
+        # Returning none since linux does not require xml profile
+        return None
 
 def connect_to_wifi(ssid, password, encryption_type):
-    profile_path = create_wifi_profile(ssid, password, encryption_type)
-    interface_add_command = f'netsh wlan add profile filename="{profile_path}"'
-    interface_add_command_response = subprocess.run(interface_add_command, shell=True, capture_output=True, text=True)
-    if interface_add_command_response.returncode ==0:
+    system = platform.system()
+    if system == "Windows":
+        profile_path = create_wifi_profile(ssid, password, encryption_type)
+        interface_add_command = f'netsh wlan add profile filename="{profile_path}"'
+        interface_add_command_response = subprocess.run(interface_add_command, shell=True, capture_output=True, text=True)
+        if interface_add_command_response.returncode == 0:
+            check_interface_command = f'netsh wlan show interface'
+            check_interface_command_response = subprocess.run(check_interface_command, shell=True, capture_output=True, text=True)
+            interface_name = extract_interface_name(check_interface_command_response.stdout)
 
-        check_interface_command = f'netsh wlan show interface'
-        check_interface_command_response = subprocess.run(check_interface_command,shell=True, capture_output=True, text=True)
-        interface_name = extract_interface_name(check_interface_command_response.stdout)
+            add_profile_command = f'netsh wlan add profile filename="{profile_path}" interface="{interface_name}"'
+            add_profile_command_response = subprocess.run(add_profile_command, shell=True, capture_output=True, text=True)
 
-        add_profile_command = f'netsh wlan add profile filename="{profile_path}" interface="{interface_name}"'
-        add_profile_command_response = subprocess.run(add_profile_command, shell=True, capture_output=True, text=True)
+            if "is added on interface" in add_profile_command_response.stdout:
+                wifi_connect_command = f'netsh wlan connect name="{ssid}"'
+                result = subprocess.run(wifi_connect_command, shell=True, capture_output=True, text=True)
 
-        if "is added on interface" in add_profile_command_response.stdout:
-            wifi_connect_command = f'netsh wlan connect name="{ssid}"'
-            result = subprocess.run(wifi_connect_command, shell=True, capture_output=True, text=True)
-
-            if result.returncode == 0:
-                print(f"Successfully connected to {ssid}")
-                cap.release()
-                cv2.destroyAllWindows()
-                os.remove(profile_path)
-                sys.exit(0)
-            else:
-                print(f"Failed to connect: {result.stderr}")
-
+                if result.returncode == 0:
+                    print(f"Successfully connected to {ssid}")
+                    cap.release()
+                    cv2.destroyAllWindows()
+                    os.remove(profile_path)
+                    sys.exit(0)
+                else:
+                    print(f"Failed to connect: {result.stderr}")
+    else:  
+        wifi_connect_command = f'nmcli device wifi connect "{ssid}" password "{password}"'
+        result = subprocess.run(wifi_connect_command, shell=True, capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"Successfully connected to {ssid}")
+            cap.release()
+            cv2.destroyAllWindows()
+            sys.exit(0)
+        else:
+            print(f"Failed to connect: {result.stderr}")
 
 def extract_interface_name(interface_output):
-    lines = interface_output.splitlines()
-    for line in lines:
-        if line.startswith("    Name"):
-            return line.split(":")[1].strip() 
+    if platform.system() == "Windows":
+        lines = interface_output.splitlines()
+        for line in lines:
+            if line.startswith("    Name"):
+                return line.split(":")[1].strip()
     return None
-
 
 def parse_wifi_qr(data):
     wifi_data = {}
@@ -102,9 +116,9 @@ def parse_wifi_qr(data):
                 wifi_data['ssid'] = element[2:]
             if element.startswith('P:'):
                 if element[2:] == '':
-                    wifi_data['password'] = None  
+                    wifi_data['password'] = None
                 else:
-                    password = element[2:].replace("&","&amp;")
+                    password = element[2:].replace("&", "&")
                     wifi_data['password'] = password
             if element.startswith('H:'):
                 wifi_data['hidden'] = element[2:]
